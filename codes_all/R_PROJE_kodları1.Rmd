@@ -1,0 +1,247 @@
+#####KÜTÜPHANELER########
+
+library(ggplot2)
+library(tidyverse)
+library(stats)
+library(rstatix)  
+library(ggpubr)
+library(gplots)
+library(car)
+library(dplyr)
+library(aplpack)
+library(ggpubr)
+
+######VERİ ANALİZİ################
+df <- read.csv("fast_food.csv", sep=";")
+df
+head(df)
+dim(df)
+str(df)
+df %>% select(desc(calories))
+
+numeric <- df[3:16]
+numeric
+
+is.na(df)
+
+# hangi degiskende kac  bos deger var
+colSums(is.na(df[3:16])) 
+
+# bos değerleri ort ile doldur
+numeric_cols <- sapply(df, is.numeric)
+
+df[numeric_cols] <- lapply(df[numeric_cols], function(x) {
+  ifelse(is.na(x), mean(x, na.rm = TRUE), x)
+})
+
+colSums(is.na(df[3:16]))
+
+
+#veride ki integer olan sütunların adını yazdıran bir fonksiyon olusturup bu değişkenlerin histogramını çizdirdik.
+int_num_col_names <- function(df) {
+  cols <- names(df)  # Tüm sütun adlarını al
+  
+  int_num_cols <- c()  # Tam sayı ve ondalık sayı sütunlarını saklamak için boş bir vektör oluştur
+  
+  for (col in cols) {
+    if (is.integer(df[[col]]) || is.numeric(df[[col]])) {  # Sütunun veri tipini kontrol et
+      int_num_cols <- c(int_num_cols, col)  # Tam sayı veya ondalık sayı sütununu vektöre ekle
+    }
+  }
+  
+  return(int_num_cols)  # Tam sayı ve ondalık sayı sütunlarının adlarını döndür
+}
+
+ int_num_col_names(df)
+ 
+
+
+df %>% select(calories, decs(sat_fat))
+df %>% filter(calories >2000)
+df %>% arrange(calories, desc(total_carb))
+
+#Restoranlara göre gruplandi ve özetlendi
+grouped_summary <- df %>%
+  group_by(restaurant) %>%
+  summarise(
+    cal_fat_avg = mean(cal_fat),
+    total_fat_avg = mean(total_fat),
+    sat_fat_avg = mean(sat_fat),
+    trans_fat_avg = mean(trans_fat),
+    cholesterol_avg = mean(cholesterol),
+    sodium_avg = mean(sodium),
+    total_carb_avg = mean(total_carb),
+    fiber_avg = mean(fiber)
+  )
+grouped_summary
+
+# GGplot kullanarak grafik olusturma
+ggplot(data = df, aes(x = restaurant, y = calories, fill = restaurant)) +
+  geom_boxplot() +
+  labs(x = "Restaurant", y = "Calories", title = "Calories by Restaurant") +
+  theme_minimal()
+
+#frekans tablosu  
+df %>% select(where(is.numeric)) %>% 
+  apply(2, freq_table)
+  
+
+
+#statistics degerleri
+df %>% get_summary_stats(type='common')
+#her bir degişkenın ort bulduk
+apply(df[,3:16], 2, mean) 
+
+#histogram
+hist(df$calories)  
+hist(df$cal_fat) 
+hist(df$sodium)
+hist(df$total_fat)
+hist(df$sat_fat)
+hist(df$trans_fat)
+hist(df$cholesterol)
+hist(df$total_carb)
+hist(df$fiber)
+hist(df$sugar)
+hist(df$protein)
+hist(df$vit_a)
+hist(df$vit_c)
+hist(df$calcium)
+
+
+# Burger King ve McDonald's restoranlarini filtreleme
+selected_data <- df %>%
+  filter(restaurant %in% c("Burger King", "Mcdonalds"))
+
+selected_data <- selected_data %>%
+  select(restaurant, calories) %>%
+  mutate(calori_avg = as.numeric(calories))
+  
+
+
+#####1.HİPOTEZ NORMALLİK TESTİ###########
+
+#her bir degisken icin shaphirowilks uyguladık
+df %>% select(where(is.numeric)) %>% 
+  apply(2, shapiro_test)
+
+######2.HİPOTEZ MANN WHİTNEY#########
+
+# Mann-Whitney U testi
+mannwhitney_test <- wilcox.test(calori_avg ~ restaurant, data = selected_data)
+#Sonuc
+print(mannwhitney_test)
+summary(selected_data)
+
+# GGplot kullanarak grafik olusturma
+ggplot(data = df, aes(x = restaurant, y = calories, fill = restaurant)) +
+  geom_boxplot() +
+  labs(x = "Restaurant", y = "Calories", title = "Calories by Restaurant") +
+  theme_minimal()
+
+######3.HİPOTEZ Kİ KARE########## 
+
+#ki kare testi
+kalori_durum<-ifelse(df$cholesterol>800, "high",
+                     ifelse(df$calories>=150 & df$calories<=800,"low","medium"))
+
+
+chisq_test(df$restaurant,kalori_durum)
+
+
+
+######4.HİPOTEZ KRUSKAL#############
+
+# select() kullanarak belirli değişkenleri seçme
+df_selected <- select(df, restaurant, cholesterol)
+df_selected
+head(df_selected)
+
+# filter() kullanarak belirli koşulları sağlayan gözlemleri seçme
+df_filtered <- filter(df, restaurant == "Subway", cholesterol > 100)
+df_filtered
+
+# arrange() kullanarak restaurant ve cholesterol değişkenlerine göre sıralama
+df_sorted <- arrange(df, restaurant, cholesterol)
+df_sorted 
+
+# mutate() kullanarak yeni bir değişken oluşturma veya mevcut değişkenleri dönüştürme
+df_modified <- mutate(df, total_cholesterol = cholesterol * 2)
+df_modified
+
+# group_by() ve summarise() ile grup ortalamalarını hesaplama
+df_summary <- df %>%
+  group_by(restaurant) %>%
+  summarise(mean_value = mean(cholesterol))
+df_summary
+
+#kruskal wallisve dunn testleri
+df %>% kruskal_test(cholesterol ~ restaurant)
+df %>% dunn_test(cholesterol ~ restaurant) %>% 
+  {print(., n = Inf, na.print = "NA")}
+
+#boxplot
+ggboxplot(df, x='restaurant', y='cholesterol',
+          color = 'restaurant',
+          palette = "jco")
+
+
+
+#####5.HİPOTEZ KOLERASYON TESTİ#######
+
+##Pearson katsayısı ile iki degisken arasındaki iliskiyi belirler.
+df %>% select(-restaurant) %>% select(where(is.numeric)) %>% 
+  cor_test(sugar, calories, method = "pearson")
+  
+#sekerin diğer numerik degiskenler ile arasındaki iliskiyi inceleriz
+df %>% select(-restaurant) %>% select(where(is.numeric)) %>% 
+  cor_test(sugar, method = "pearson")
+#sekerin diğer numerik degiskenler ile arasındaki iliskiyi sayısal değerlerle incelemek istersek
+df %>% select(-restaurant) %>% select(where(is.numeric)) %>% 
+  cor_mat() %>%  cor_mark_significant()
+
+#tabloda incelersek
+df %>% select(-restaurant) %>% select(where(is.numeric)) %>% 
+  cor_mat() %>% 
+  cor_reorder() %>%
+  pull_lower_triangle() %>% 
+  cor_plot()
+
+
+
+######PART B (MULTIDIMENSIONAL SCALING)###############
+
+# Load required packages
+library(magrittr)
+library(dplyr)
+library(ggpubr)
+# Compute MDS
+mds <- new_data1 %>%
+  dist() %>%          
+  cmdscale() %>%
+  as_tibble()
+colnames(mds) <- c("Dim.1", "Dim.2")
+# Plot MDS
+ggscatter(mds, x = "Dim.1", y = "Dim.2", 
+          label = rownames(new_data1),
+          size = 1,
+          repel = TRUE)
+# K-means clustering
+clust <- kmeans(mds, 3)$cluster %>%
+  as.factor()
+mds <- mds %>%
+  mutate(groups = clust)
+# Plot and color by groups
+ggscatter(mds, x = "Dim.1", y = "Dim.2", 
+          label = rownames(new_data1),
+          color = "groups",
+          palette = "jco",
+          size = 1, 
+          ellipse = TRUE,
+          ellipse.type = "convex",
+          repel = TRUE)
+
+
+
+
+
